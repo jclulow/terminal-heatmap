@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# expects input from `iostat -xn 1`
+
+# the call to iostat is the simplest way to get
+# the number of disks + NFS mounts, etc.
+diskcount=$(( $(iostat -xn 1 1 | wc -l) - 2 ))
+
+# loop the output of iostat(1M) and extract the meaninful fields
+first=0
+i=0
+while read rs ws krs kws wait actv wsvc_t asvc_t w b device; do
+	# ignore the headers
+	if ((first++ < 2)); then
+		continue
+	fi
+
+	devicenames[$i]=$device
+	percbusy[$i]=$b
+
+	if (( ++i >= diskcount )); then
+		printf '%s ' "${percbusy[@]}"
+		echo
+
+		first=0
+		i=0
+	fi
+done
