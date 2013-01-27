@@ -1,0 +1,19 @@
+#!/bin/ksh
+
+cpubuf=
+waiting=yes
+while read CPU minf mjf xcal intr ithr csw icsw migr smtx \
+  srw syscl usr sys wt idl; do
+    if [[ $CPU == "CPU" ]]; then
+      if [[ $waiting == "yes" ]]; then
+        waiting=no
+      else
+        echo $cpubuf
+        cpubuf=
+      fi
+      continue
+    fi
+    (( busy = 100 - idl ))
+    cpubuf="$cpubuf $busy "
+done
+
