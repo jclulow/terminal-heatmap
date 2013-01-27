@@ -20,10 +20,51 @@ This version accepts input on ```stdin``` of the form ...
 ```
 
 ... where each line is some number whitespace-separated integers between
-0 and 100.  The most natural usage is to take input from _mpstat(1)_
-and spit out CPU Usage figures for all CPUs, once per second,
-using the provided ```formatters/mpstat``` script.  For example:
+0 and 100.  The integers will be split up into buckets and the count of
+integers in each bucket determines that bucket's intensity in the
+heatmap.
+
+The most natural usage is to take input from _mpstat(1)_ and spit out
+CPU Usage figures for all CPUs, once per second, using the provided
+```formatters/mpstat``` script.  For example:
 
 ```bash
 ssh someserver mpstat 1 | ./formatters/mpstat | ./heatmap
 ```
+
+### Bucket Distributions
+
+You can decide the Y-axis for the heat map with a few options.
+
+#### Linear (-l)
+
+The default distribution of values between buckets is linear, with a
+minimum value of 0 and a maximum of 100.  This is equivalent to:
+
+```
+someprogram | ./heatmap -l -m 0 -M 100
+```
+
+#### Log-Linear (-L)
+
+In a similar fashion to
+[DTrace's llquantize()](http://dtrace.org/blogs/bmc/2011/02/08/llquantize/)
+you can specify a log distribution with linear buckets within each order
+of magnitude.  For instance: if I/O Latency is expressed in
+microseconds, it may be useful to draw a heatmap with a base of 10, from
+ the second up to the sixth order of magnitude.  i.e.
+
+```
+iolatency.d | ./someformatter | ./heatmap -L -b 10 -m 2 -M 6
+```
+
+Example output from iolatency.d during a ZFS pool scrub:
+
+![zfs scrub heatmap](http://i.imgur.com/WqodZ9F.png)
+
+### Colouring
+
+In the most recent C-based version I have used a Rank-based Colouring, as
+described in
+[this blog post](http://dtrace.org/blogs/dap/2011/06/20/heatmap-coloring/)
+by Dave Pacheco.

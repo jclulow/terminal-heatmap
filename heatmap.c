@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/termios.h>
+#include <math.h>
 
 #define	ESC	"\x1b"
 #define	CSI	ESC "["
@@ -25,7 +26,7 @@
 #define	GRAYMAX	255
 #define	GRAYRNG	(GRAYMAX - GRAYMIN)
 
-#define	LEGEND_WIDTH	6
+#define	LEGEND_WIDTH	10
 
 #define	BUFFER_SIZE	4096
 
@@ -96,7 +97,43 @@ print_time_markers(void)
 }
 
 void
-populate_buckets(int min, int max)
+loglinear_buckets(int base, int minord, int maxord)
+{
+	int i;
+	int steps_per_order, steps, order;
+
+	/*
+	 * Decide how many linear steps we can have per order.
+	 */
+	steps_per_order = bucket_count / (maxord - minord);
+	order = minord;
+	steps = 0;
+
+	for (i = 0; i < bucket_count; i++) {
+		int x = (int) pow(base, order);
+		int y = ((x * 10) - x) * steps / steps_per_order;
+		bucket_vals[i] = y;
+		if (steps >= steps_per_order) {
+			steps = 2;
+			order++;
+		} else {
+			steps++;
+		}
+	}
+}
+
+void
+linear_buckets(int min, int max)
+{
+	int i;
+
+	for (i = 0; i < bucket_count; i++) {
+		bucket_vals[i] = i * (max - min) / bucket_count + min;
+	}
+}
+
+void
+allocate_buckets()
 {
 	int i;
 
@@ -108,10 +145,6 @@ populate_buckets(int min, int max)
 	if (bucket_vals == NULL) {
 		fprintf(stderr, "bucket values: %s\n", strerror(errno));
 		exit(1);
-	}
-
-	for (i = 0; i < bucket_count; i++) {
-		bucket_vals[i] = i * (max - min) / bucket_count + min;
 	}
 }
 
@@ -153,34 +186,117 @@ time_string(void)
 }
 
 void
+new_row_column(int bucket, int colour)
+{
+	int newcol = w - LEGEND_WIDTH - 1;
+	int y = h - 1 - bucket;
+
+	/*
+	 * Shift this bucket to the left:
+	 */
+	fprintf(stdout, CSI "%d;4H", y); /* move afore the line */
+	fprintf(stdout, CSI "1P"); /* truncate on the left */
+
+	/*
+	 * Write heatmap block:
+	 */
+	fprintf(stdout, CSI "%d;%dH", y, newcol); /* move to right column */
+	xcb(colour);
+	fprintf(stdout, " " RST);
+
+	/*
+	 * Write legend:
+	 */
+	if (bucket != bucket_count - 2 && (bucket % 3 == 0 ||
+	    bucket == bucket_count - 1))
+		fprintf(stdout, " %d", bucket_vals[bucket]);
+}
+
+void
 new_row(int *vals)
 {
 	char *timestr = time_string();
-	int newcol = w - LEGEND_WIDTH - 1;
-	int bucket = 0;
+	int remaining = bucket_count;
+	int bucket;
+	int *dvlist = empty_buckets();
+	int distinct_vals = 0, rem_distinct_vals;
 
 	moveto(-(strlen(timestr)), 1);
 	fprintf(stdout, "%s", timestr);
 
+	/*
+	 * Do Rank-based Colouring, as described here:
+	 *   http://dtrace.org/blogs/dap/2011/06/20/heatmap-coloring/
+	 */
+	/*
+	 * 1. Print Black for all zero-valued buckets.
+	 */
 	for (bucket = 0; bucket < bucket_count; bucket++) {
-		int y = h - 1 - bucket;
-		fprintf(stdout, CSI "%d;4H", y); /* move afore the line */
-		fprintf(stdout, CSI "1P"); /* truncate on the left */
-
-		/*
-		 * Write heatmap block:
-		 */
-		fprintf(stdout, CSI "%d;%dH", y, newcol); /* move to right column */
-		xcb(GRAYMIN + 2 * vals[bucket]);
-		fprintf(stdout, " " RST);
-
-		/*
-		 * Write legend:
-		 */
-		if (bucket % 3 == 0 || bucket == bucket_count - 1)
-			fprintf(stdout, " %d", bucket_vals[bucket]);
+		if (vals[bucket] == 0) {
+			new_row_column(bucket, 0);
+			remaining--;
+		} else {
+			/*
+			 * Record distinct non-zero bucket values.
+			 */
+			int c;
+			for (c = 0; c < bucket_count; c++) {
+				if (dvlist[c] == vals[bucket]) {
+					/* seen this one already. */
+					break;
+				} else if (dvlist[c] == 0) {
+					/* ok, mark it down. */
+					dvlist[c] = vals[bucket];
+					distinct_vals++;
+					break;
+				}
+			}
+		}
 	}
 
+	if (remaining < 1)
+		goto out;
+
+	/*
+	 * 2. Draw all buckets having the same value with the same colour
+	 *    on a rank-based ramp from GRAY_MIN to GRAY_MAX.
+	 */
+	rem_distinct_vals = distinct_vals;
+	while (remaining > 0 && rem_distinct_vals > 0) {
+		int dv;
+		int maxdv = 0;
+		int colour;
+		/*
+		 * Find next-largest distinct bucket value:
+		 */
+		for (dv = 0; dv < bucket_count; dv++) {
+			if (dvlist[dv] > dvlist[maxdv]) {
+				maxdv = dv;
+			}
+		}
+		/*
+		 * Determine colour:
+		 */
+		colour = GRAYMIN + (GRAYMAX - GRAYMIN) *
+		    rem_distinct_vals / distinct_vals;
+		/*
+		 * Draw all buckets with that value:
+		 */
+		for (bucket = 0; bucket < bucket_count; bucket++) {
+			if (vals[bucket] == dvlist[maxdv]) {
+				new_row_column(bucket, colour);
+				remaining--;
+			}
+		}
+		/*
+		 * Clear out the distinct value.
+		 */
+		dvlist[maxdv] = 0;
+		rem_distinct_vals--;
+	}
+
+out:
+	free(dvlist);
 	free(vals);
 }
 
@@ -264,7 +380,48 @@ get_terminal_size()
 int
 main(int argc, char **argv)
 {
+	int c;
+	int opt_base = -1, opt_min = -1, opt_max = -1;
+	int opt_lin = 0, opt_loglin = 0;
 	char *line_buffer = malloc(BUFFER_SIZE);
+
+	/*
+	 * Process flags...
+	 */
+	while ((c = getopt(argc, argv, ":b:lLm:M:")) != -1) {
+		switch (c) {
+		case 'l':
+			opt_lin++;
+			break;
+		case 'L':
+			opt_loglin++;
+			break;
+		case 'b':
+			opt_base = atoi(optarg);
+			break;
+		case 'm':
+			opt_min = atoi(optarg);
+			break;
+		case 'M':
+			opt_max = atoi(optarg);
+			break;
+		case ':':
+			fprintf(stderr, "Option -%c requires an operand\n",
+			    optopt);
+			exit(1);
+			break;
+		case '?':
+			fprintf(stderr, "Option -%c not recognised\n",
+			    optopt);
+			exit(1);
+			break;
+		}
+		if (opt_lin > 0 && opt_loglin > 0) {
+			fprintf(stderr, "Options -l and -L are mutually "
+			    "exclusive.\n");
+			exit(1);
+		}
+	}
 
 	/*
 	 * Signals...
@@ -291,7 +448,24 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
-	populate_buckets(0, 100);
+	allocate_buckets();
+	if (opt_loglin) {
+		/*
+		 * Use log-linear bucket ranges, similar to DTrace
+		 * llquantize().
+		 */
+		int base = opt_base > 0 ? opt_base : 10;
+		int min = opt_min > 0 ? opt_min : 2;
+		int max = opt_max > 0 ? opt_max : 6;
+
+		loglinear_buckets(base, min, max);
+	} else {
+		/* Assume linear, using sane defaults for mpstat(1). */
+		int min = opt_min > 0 ? opt_min : 0;
+		int max = opt_max > 0 ? opt_max : 100;
+
+		linear_buckets(min, max);
+	}
 
 	/*
 	 * Set up the screen:
