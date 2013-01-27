@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <err.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 #if defined(__SVR4) && defined(__sun)
 #include <stropts.h>
 #endif
@@ -77,14 +77,12 @@ print_time_markers(void)
 {
 	int offs;
 	int mark = 0;
-	char *marker = NULL;
+	char marker[100];
 
 	for (offs = w - LEGEND_WIDTH; offs >= 1; offs -= 10) {
 		int toffs = offs;
 
-		if (marker != NULL)
-			free(marker);
-	       	(void) asprintf(&marker, "%ds|", mark);
+		(void) snprintf(marker, 100, "%ds|", mark);
 
 		toffs -= strlen(marker);
 		if (toffs < 1)
@@ -95,9 +93,6 @@ print_time_markers(void)
 
 		mark += 10;
 	}
-
-	if (marker != NULL)
-		free(marker);
 }
 
 void
@@ -110,8 +105,10 @@ populate_buckets(int min, int max)
 
 	bucket_count = h - 2;
 	bucket_vals = malloc(sizeof(*bucket_vals) * bucket_count);
-	if (bucket_vals == NULL)
-		err(1, "bucket_vals");
+	if (bucket_vals == NULL) {
+		fprintf(stderr, "bucket values: %s\n", strerror(errno));
+		exit(1);
+	}
 
 	for (i = 0; i < bucket_count; i++) {
 		bucket_vals[i] = i * (max - min) / bucket_count + min;
@@ -123,8 +120,10 @@ empty_buckets(void)
 {
 	int *ret = calloc(bucket_count, sizeof (*bucket_vals));
 
-	if (ret == NULL)
-		err(1, "empty_buckets");
+	if (ret == NULL) {
+		fprintf(stderr, "empty buckets: %s\n", strerror(errno));
+		exit(1);
+	}
 
 	return (ret);
 }
@@ -226,15 +225,19 @@ get_terminal_size()
 #endif
 
 #if defined(TIOCGWINSZ)
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &tsz) == -1)
-		err(1, "could not get terminal size");
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &tsz) == -1) {
+		fprintf(stderr, "could not get screen size!\n");
+		exit(1);
+	}
 
         h = tsz.ws_row;
         w = tsz.ws_col;
 
 #elif defined(TIOCGSIZE)
-	if (ioctl(STDOUT_FILENO, TIOCGSIZE, &tsz) == -1)
-		err(1, "could not get terminal size");
+	if (ioctl(STDOUT_FILENO, TIOCGSIZE, &tsz) == -1) {
+		fprintf(stderr, "could not get screen size!\n");
+		exit(1);
+	}
 
 	h = tsz.ts_lines;
 	w = tsz.ts_cols;
@@ -276,8 +279,10 @@ main(int argc, char **argv)
 	setvbuf(stdin, NULL, _IOLBF, 0);
 	setvbuf(stdout, NULL, _IONBF, 0);
 
-	if (line_buffer == NULL)
-		err(1, "line buffer");
+	if (line_buffer == NULL) {
+		fprintf(stderr, "line buffer: %s\n", strerror(errno));
+		exit(1);
+	}
 
 	populate_buckets(0, 100);
 
