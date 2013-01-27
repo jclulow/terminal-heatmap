@@ -27,3 +27,6 @@ using the provided ```formatters/mpstat``` script.  For example:
 ```bash
 ssh someserver mpstat 1 | ./formatters/mpstat | ./heatmap
 ```
+
+```bash
+ssh someserver iostat -xn 1 | ./formatters/iostat | ./heatmap
