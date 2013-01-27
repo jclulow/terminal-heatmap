@@ -30,3 +30,4 @@ ssh someserver mpstat 1 | ./formatters/mpstat | ./heatmap
 
 ```bash
 ssh someserver iostat -xn 1 | ./formatters/iostat | ./heatmap
+```
