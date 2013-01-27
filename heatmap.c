@@ -204,6 +204,13 @@ line_to_row(char *line)
 		}
 		pos++;
 	}
+	if (last != NULL) {
+		int val, bkt;
+		*pos = '\0';
+		val = atoi(last);
+		bkt = find_bucket(val);
+		row[bkt]++;
+	}
 
 	return (row);
 }
