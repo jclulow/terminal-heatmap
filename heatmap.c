@@ -22,7 +22,8 @@
 #define	REV	CSI "7m"
 #define	CLRSCR	CSI "H" CSI "J"
 
-#define	GRAYMIN	232
+/* NB: The darkest gray is probably too dark. */
+#define	GRAYMIN	(232 + 1)
 #define	GRAYMAX	255
 #define	GRAYRNG	(GRAYMAX - GRAYMIN)
 
@@ -277,8 +278,16 @@ new_row(int *vals)
 		/*
 		 * Determine colour:
 		 */
-		colour = GRAYMIN + (GRAYMAX - GRAYMIN) *
-		    rem_distinct_vals / distinct_vals;
+		if (distinct_vals < 2) {
+			/*
+			 * If all buckets are the same value, just use the
+			 * highest intensity.
+			 */
+			colour = GRAYMAX;
+		} else {
+			colour = GRAYMIN + (GRAYMAX - GRAYMIN) *
+			    (rem_distinct_vals - 1) / (distinct_vals - 1);
+		}
 		/*
 		 * Draw all buckets with that value:
 		 */
