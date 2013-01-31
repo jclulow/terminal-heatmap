@@ -34,7 +34,7 @@ typedef enum { B_FALSE, B_TRUE } boolean_t;
 
 #define	BUFFER_SIZE	4096
 
-#define	TITLE	"   T E R M I N A L   H E A T M A P   "
+#define	TITLE	"T E R M I N A L   H E A T M A P"
 
 
 int h;
@@ -71,11 +71,11 @@ moveto(int x, int y)
 void
 print_title(char *title)
 {
-	int len = strlen(title);
+	int len = strlen(title) + 6;
 	int offs = (w - len) / 2;
 
 	moveto(offs, 1);
-	fprintf(stdout, REV "%s" RST, TITLE);
+	fprintf(stdout, REV "   %s   " RST, title);
 }
 
 void
@@ -465,12 +465,13 @@ main(int argc, char **argv)
 	int c;
 	int opt_base = -1, opt_min = -1, opt_max = -1;
 	int opt_lin = 0, opt_loglin = 0;
+	char *opt_title = NULL;
 	char *line_buffer = malloc(BUFFER_SIZE);
 
 	/*
 	 * Process flags...
 	 */
-	while ((c = getopt(argc, argv, ":b:DlLm:M:")) != -1) {
+	while ((c = getopt(argc, argv, ":b:DlLm:M:t:")) != -1) {
 		switch (c) {
 		case 'l':
 			opt_lin++;
@@ -489,6 +490,9 @@ main(int argc, char **argv)
 			break;
 		case 'D':
 			debug++;
+			break;
+		case 't':
+			opt_title = strdup(optarg);
 			break;
 		case ':':
 			fprintf(stderr, "Option -%c requires an operand\n",
@@ -556,7 +560,7 @@ main(int argc, char **argv)
 	 * Set up the screen:
 	 */
 	fprintf(stdout, CLRSCR NOCURS);
-	print_title(TITLE);
+	print_title(opt_title != NULL ? opt_title : TITLE);
 	print_time_markers();
 
 	/*
