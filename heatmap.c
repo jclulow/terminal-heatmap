@@ -8,6 +8,9 @@
 #include <errno.h>
 #if defined(__SVR4) && defined(__sun)
 #include <stropts.h>
+#include <sys/types.h>
+#else
+typedef enum { B_FALSE, B_TRUE } boolean_t;
 #endif
 #include <signal.h>
 #include <sys/ioctl.h>
@@ -316,35 +319,98 @@ out:
 	free(vals);
 }
 
+typedef enum {
+	PS_REST = 1,
+	PS_VALUE,
+	PS_COUNT,
+	PS_DONE
+} parser_state_t;
+
 int *
 line_to_row(char *line)
 {
-	char *last = NULL;
-	char *pos = line;
+	parser_state_t state;
 	int *row = empty_buckets();
+	char *cp = line, *mark = NULL;
+	boolean_t commit = B_FALSE;
+	int value = -1, count = 1;
 
-	while (*pos != '\0' && *pos != '\n') {
-		if ((*pos >= '0' && *pos <= '9') && last == NULL) {
-			last = pos;
-		} else if ((*pos == ' ' || *pos == '\t') && last != NULL) {
-			int val, bkt;
-			*pos = '\0';
-			val = atoi(last);
-			bkt = find_bucket(val);
-			row[bkt]++;
-			last = NULL;
+	for (state = PS_REST; state != PS_DONE; cp++) {
+		if (*cp == '\n' || *cp == '\r') {
+			/*
+			 * fgets() may leave trailing new-lines.  Treat them
+			 * as string terminators.
+			 */
+			*cp = '\0';
 		}
-		pos++;
+		switch (state) {
+		case PS_REST:
+			if (*cp >= '0' && *cp <= '9') {
+				state = PS_VALUE;
+				mark = cp;
+			} else if (*cp == '\0') {
+				state = PS_DONE;
+			} else if (*cp != ' ' && *cp != '\t') {
+				/*
+				 * Unexpected input!
+				 */
+				goto error;
+			}
+			break;
+		case PS_VALUE:
+			if (*cp >= '0' && *cp <= '9') {
+				break;
+			} else if (*cp == '\0' || *cp == ' ' || *cp == '\t') {
+				state = (*cp == '\0' ? PS_DONE : PS_REST);
+				*cp = '\0';
+				value = atoi(mark);
+				count = 1;
+				commit = B_TRUE;
+			} else if (*cp == '*') {
+				state = PS_COUNT;
+				*cp = '\0';
+				value = atoi(mark);
+				mark = cp + 1;
+			} else {
+				/*
+				 * Unexpected input!
+				 */
+				fprintf(stderr, CLRSCR CURS "\nerror two\n");
+				exit(1);
+				goto error;
+			}
+			break;
+		case PS_COUNT:
+			if (*cp >= '0' && *cp <= '9') {
+				break;
+			} else if (*cp == '\0' || *cp == ' ' || *cp == '\t') {
+				state = (*cp == '\0' ? PS_DONE : PS_REST);
+				*cp = '\0';
+				count = atoi(mark);
+				commit = B_TRUE;
+			} else {
+				/*
+				 * Unexpected input!
+				 */
+				fprintf(stderr, CLRSCR CURS "\nerror three\n");
+				exit(1);
+				goto error;
+			}
+			break;
+		default:
+			goto error;
+		}
+		if (commit == B_TRUE) {
+			int bucket = find_bucket(value);
+			row[bucket] += count;
+			commit = B_FALSE;
+		}
 	}
-	if (last != NULL) {
-		int val, bkt;
-		*pos = '\0';
-		val = atoi(last);
-		bkt = find_bucket(val);
-		row[bkt]++;
-	}
-
 	return (row);
+
+error:
+	free(row);
+	return (NULL);
 }
 
 static void
@@ -500,14 +566,22 @@ main(int argc, char **argv)
 	 */
 	for (;;) {
 		char *buf = fgets(line_buffer, BUFFER_SIZE, stdin);
+		int *row = line_to_row(buf);
 
-		if (buf == NULL)
-			break;
+		if (row == NULL) {
+			fprintf(stdout, CLRSCR CURS);
+			fprintf(stderr, "Unexpected input formatting; "
+			    "aborting.\n");
+			exit(1);
+		}
 
-		new_row(line_to_row(buf));
+		if (buf == NULL) {
+			fprintf(stdout, CLRSCR CURS);
+			fprintf(stderr, "Unexpected end of input.\n");
+			exit(1);
+		}
+
+		new_row(row);
 	}
-
-	/* XXX cleanup terminal here */
-	fprintf(stdout, CLRSCR CURS);
 }
 
