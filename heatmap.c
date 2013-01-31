@@ -107,20 +107,20 @@ loglinear_buckets(int base, int minord, int maxord)
 	/*
 	 * Decide how many linear steps we can have per order.
 	 */
-	steps_per_order = bucket_count / (maxord - minord);
-	order = minord;
+	steps_per_order = (bucket_count - 1) / (maxord - minord);
+	order = (int) pow(base, minord);
 	steps = 0;
 
 	for (i = 0; i < bucket_count; i++) {
-		int x = (int) pow(base, order);
-		int y = ((x * 10) - x) * steps / steps_per_order;
-		bucket_vals[i] = y;
-		if (steps >= steps_per_order) {
-			steps = 2;
-			order++;
-		} else {
-			steps++;
+		if (steps > steps_per_order) {
+			steps = 1;
+			order *= base;
 		}
+
+		bucket_vals[i] = (i == 0 ? 0 : order + (base * order) *
+		    steps / steps_per_order);
+
+		steps++;
 	}
 }
 
