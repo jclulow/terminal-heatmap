@@ -40,6 +40,7 @@ int w;
 int *bucket_vals = NULL;
 int bucket_count = -1;
 
+int debug = 0;
 
 
 void
@@ -187,7 +188,7 @@ time_string(void)
 }
 
 void
-new_row_column(int bucket, int colour)
+new_row_column(int bucket, int value, int colour)
 {
 	int newcol = w - LEGEND_WIDTH - 1;
 	int y = h - 1 - bucket;
@@ -208,9 +209,15 @@ new_row_column(int bucket, int colour)
 	/*
 	 * Write legend:
 	 */
-	if (bucket != bucket_count - 2 && (bucket % 3 == 0 ||
+	if (debug > 0 || bucket != bucket_count - 2 && (bucket % 3 == 0 ||
 	    bucket == bucket_count - 1))
 		fprintf(stdout, " %d", bucket_vals[bucket]);
+
+	/*
+	 * Print values for debugging:
+	 */
+	if (debug > 0)
+		fprintf(stdout, CSI "%d;1H" RST "%d", y, value);
 }
 
 void
@@ -234,7 +241,7 @@ new_row(int *vals)
 	 */
 	for (bucket = 0; bucket < bucket_count; bucket++) {
 		if (vals[bucket] == 0) {
-			new_row_column(bucket, 0);
+			new_row_column(bucket, 0, 0);
 			remaining--;
 		} else {
 			/*
@@ -293,7 +300,7 @@ new_row(int *vals)
 		 */
 		for (bucket = 0; bucket < bucket_count; bucket++) {
 			if (vals[bucket] == dvlist[maxdv]) {
-				new_row_column(bucket, colour);
+				new_row_column(bucket, vals[bucket], colour);
 				remaining--;
 			}
 		}
@@ -397,7 +404,7 @@ main(int argc, char **argv)
 	/*
 	 * Process flags...
 	 */
-	while ((c = getopt(argc, argv, ":b:lLm:M:")) != -1) {
+	while ((c = getopt(argc, argv, ":b:DlLm:M:")) != -1) {
 		switch (c) {
 		case 'l':
 			opt_lin++;
@@ -413,6 +420,9 @@ main(int argc, char **argv)
 			break;
 		case 'M':
 			opt_max = atoi(optarg);
+			break;
+		case 'D':
+			debug++;
 			break;
 		case ':':
 			fprintf(stderr, "Option -%c requires an operand\n",
