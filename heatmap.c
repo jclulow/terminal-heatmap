@@ -28,7 +28,7 @@ typedef enum { B_FALSE, B_TRUE } boolean_t;
 /* NB: The darkest gray is probably too dark. */
 #define	GRAYMIN	(232 + 1)
 #define	GRAYMAX	255
-#define	GRAYRNG	(GRAYMAX - GRAYMIN)
+#define	GRAYRNG	(graymax - graymin)
 
 #define	LEGEND_WIDTH	10
 
@@ -42,6 +42,9 @@ int *bucket_vals = NULL;
 int bucket_count = -1;
 
 int debug = 0;
+
+int graymax = GRAYMAX;
+int graymin = GRAYMIN;
 
 
 void
@@ -291,9 +294,9 @@ new_row(int *vals)
 			 * If all buckets are the same value, just use the
 			 * highest intensity.
 			 */
-			colour = GRAYMAX;
+			colour = graymax;
 		} else {
-			colour = GRAYMIN + (GRAYMAX - GRAYMIN) *
+			colour = graymin + (graymax - graymin) *
 			    (rem_distinct_vals - 1) / (distinct_vals - 1);
 		}
 		/*
@@ -463,6 +466,7 @@ main(int argc, char **argv)
 	int c;
 	int opt_base = -1, opt_min = -1, opt_max = -1;
 	int opt_lin = 0, opt_loglin = 0;
+	int opt_grayskip = 0;
 	char *opt_title = NULL;
 	char *linebuf = NULL;
 	size_t linebufsz = 0;
@@ -470,7 +474,7 @@ main(int argc, char **argv)
 	/*
 	 * Process flags...
 	 */
-	while ((c = getopt(argc, argv, ":b:DlLm:M:t:")) != -1) {
+	while ((c = getopt(argc, argv, ":b:DG:lLm:M:t:")) != -1) {
 		switch (c) {
 		case 'l':
 			opt_lin++;
@@ -493,6 +497,9 @@ main(int argc, char **argv)
 		case 't':
 			opt_title = strdup(optarg);
 			break;
+		case 'G':
+			opt_grayskip = atoi(optarg);
+			break;
 		case ':':
 			fprintf(stderr, "Option -%c requires an operand\n",
 			    optopt);
@@ -509,6 +516,13 @@ main(int argc, char **argv)
 			    "exclusive.\n");
 			exit(1);
 		}
+	}
+
+	graymin += opt_grayskip;
+	if (opt_grayskip < 0 || GRAYRNG < 1) {
+		fprintf(stderr, "There are not %d shades of gray.\n",
+		    opt_grayskip);
+		exit(1);
 	}
 
 	/*
