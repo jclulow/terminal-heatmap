@@ -32,8 +32,6 @@ typedef enum { B_FALSE, B_TRUE } boolean_t;
 
 #define	LEGEND_WIDTH	10
 
-#define	BUFFER_SIZE	4096
-
 #define	TITLE	"T E R M I N A L   H E A T M A P"
 
 
@@ -466,7 +464,8 @@ main(int argc, char **argv)
 	int opt_base = -1, opt_min = -1, opt_max = -1;
 	int opt_lin = 0, opt_loglin = 0;
 	char *opt_title = NULL;
-	char *line_buffer = malloc(BUFFER_SIZE);
+	char *linebuf = NULL;
+	size_t linebufsz = 0;
 
 	/*
 	 * Process flags...
@@ -532,11 +531,6 @@ main(int argc, char **argv)
 	setvbuf(stdin, NULL, _IOLBF, 0);
 	setvbuf(stdout, NULL, _IONBF, 0);
 
-	if (line_buffer == NULL) {
-		fprintf(stderr, "line buffer: %s\n", strerror(errno));
-		exit(1);
-	}
-
 	allocate_buckets();
 	if (opt_loglin) {
 		/*
@@ -569,19 +563,30 @@ main(int argc, char **argv)
 	 * where each integer value will increment the bucket it fits in.
 	 */
 	for (;;) {
-		char *buf = fgets(line_buffer, BUFFER_SIZE, stdin);
-		int *row = line_to_row(buf);
+		int *row;
+		ssize_t ret;
 
-		if (row == NULL) {
+		errno = 0;
+		if ((ret = getline(&linebuf, &linebufsz, stdin)) < 0) {
+			if (errno == 0) {
+				/*
+				 * End of input stream.  Clean up the terminal
+				 * and exit gracefully.
+				 */
+				moveto(0, -1);
+				fprintf(stdout, CURS "\n");
+				exit(0);
+			}
+
 			fprintf(stdout, CLRSCR CURS);
-			fprintf(stderr, "Unexpected input formatting; "
-			    "aborting.\n");
+			fprintf(stderr, "ERROR: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		if (buf == NULL) {
+		if ((row = line_to_row(linebuf)) == NULL) {
 			fprintf(stdout, CLRSCR CURS);
-			fprintf(stderr, "Unexpected end of input.\n");
+			fprintf(stderr, "Unexpected input formatting; "
+			    "aborting.\n");
 			exit(1);
 		}
 
