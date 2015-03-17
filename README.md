@@ -5,12 +5,6 @@ the majesty of this _mpstat(1)_ display of a 16-CPU zone in the JPC:
 
 ![awesome heatmap](http://i.imgur.com/23Yps0g.png)
 
-## The node.js Version
-
-See: _heatmap.js_.  It's kind of broken at the moment.
-
-## The C Version
-
 This version accepts input on ```stdin``` of the form ...
 
 ```
@@ -68,3 +62,6 @@ In the most recent C-based version I have used a Rank-based Colouring, as
 described in
 [this blog post](http://dtrace.org/blogs/dap/2011/06/20/heatmap-coloring/)
 by Dave Pacheco.
+
+If the darkest shades are not visible in your terminal, you can skip some
+number of shades from the dark end of the spectrum with the `-G` flag.
